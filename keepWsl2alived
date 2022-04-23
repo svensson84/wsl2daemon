@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+# keepalived
+# this daemon ensures that windows linux subsytem does not shutdown itselfs by inactivity.
+
+function posixSignalHook() {
+    echo "posix signal received. do some stuff"
+}
+
+# POSIX signal EXIT is always run when the shell exits
+# POSIX signal SIGINT gets called by kill shell built-in (default) 
+trap posixSignalHook EXIT SIGINT
+
+
+#################################################################
+# hook method for running main program logic:
+#
+#  - method is invoked repeatedly according to the set time interval
+#  - method is forked, i.e. running in a subshell process
+#  - method is running in background, invoked by nohup
+while true
+do
+  echo "${0} running" >> running.txt
+  echo "$(set)" >> running2.txt
+  sleep 30
+done
+

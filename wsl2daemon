@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+
+# TODO SZA
+#set -euo pipefail
+#IFS=$'\n\t'
+
+_execute_commands() {
+  echo "bi am loufe commands [$$]"
+  log '$$'="$$"
+  log '$BASHPID'="$BASHPID"
+}
+
+_is_daemon_running() {
+  if [ -z "$oldPid" ]; then
+    return 1	
+  elif [ -f "$pidFile" ]; then
+    pid=`pgrep -F "$pidFile"`
+	if [ -n "$pid" ]; then
+		return 0
+	else    
+		return 1
+	fi
+  else
+	return 1
+  fi
+}
+
+_setup_daemon() {
+  # Make sure that the directories work.
+  if [ ! -d "$pidDir" ]; then
+    mkdir "$pidDir"
+  fi
+  if [ ! -d "$logDir" ]; then
+    mkdir "$logDir"
+  fi
+  if [ ! -f "$logFile" ]; then
+    touch "$logFile"
+  else
+    # Check to see if we need to rotate the logs.
+    size=$((`ls -l "$logFile" | cut -d " " -f 5`/1024))
+    if [[ $size -gt $logMaxSize ]]; then
+      mv $logFile "$logFile.old"
+      touch "$logFile"
+    fi
+  fi
+}
+
+_start_daemon() {
+  _setup_daemon
+  
+  if (_is_daemon_running) then
+    echo -e "\033[1;31mError:\033[0m $daemonCommand is already running."
+    exit 1
+  fi
+   
+  _log "$(date) : starting up $daemonCommand..."
+  echo -e "starting \033[1;37m$daemonCommand\033[0m..."
+  
+  exec "./$daemonCommand" &
+  
+  local pidDaeomonCommand=${!}
+  echo "$pidDaeomonCommand" > "$pidFile"
+  
+  _log `date +"%Y-%m-%d"`": $daemonCommand is running [PID=$pidDaeomonCommand]"
+  echo -e "\033[1;37m$daemonCommand\033[0m is is \033[1;32mrunning\033[0m [PID=$pidDaeomonCommand]"
+}
+
+_stop_daemon() {
+  if (_is_daemon_running) then
+	  echo -e "stopping \033[1;37m$daemonCommand\033[0m..."
+	  _log '*** '`date +"%Y-%m-%d"`": $daemonCommand stopped."
+
+	  if [[ ! -z `cat $pidFile` ]]; then
+		kill -9 `cat "$pidFile"` &> /dev/null
+		rm $pidFile
+	  fi
+	  return 0
+  fi
+  
+  echo -e "\033[1;37m$daemonCommand isn't running\033[0m"
+  exit 1
+}
+
+_status_daemon() {
+  if (_is_daemon_running) then
+    echo -e "\033[1;37m$daemonCommand is \033[1;32mrunning\033[0m"
+  else
+    echo -e "\033[1;37m$daemonCommand isn't running\033[0m"
+  fi
+  exit 0
+}
+
+_restart_daemon() {
+  if (_is_daemon_running) then
+	  stopDaemon
+	  startDaemon
+	  exit 0
+  fi
+
+  echo -e "\033[1;37m$daemonCommand isn't running\033[0m"
+  exit 1
+}
+
+_log() {
+  echo "$1" >> "$logFile"
+}
+
+_show_usage() {
+	echo -e "\033[1;37musage: \033[0mwsl2daemon {start|stop|status|restart} command"
+}
+
+###############################
+#  main
+##############################
+
+
+if [ $# -ne 2 ]; then
+	_show_usage
+	exit 1
+else
+	daemonCommand="$2d" # suffix 'd' by convention
+	if [ ! -f "$daemonCommand" ]; then
+		echo -e "\033[1;31mError:\033[0m $daemonCommand does not exist!"
+		exit 1
+	fi
+fi
+
+pidDir="."
+pidFile="$daemonCommand.pid"
+
+logDir="."
+# logFile="$logDir/$daemonCommand-"`date +"%Y-%m-%d"`".log"
+# To use a regular log file
+logFile="$logDir/$daemonCommand.log"
+logMaxSize=1024 # in KB
+runInterval=5 # in seconds
+
+
+if [ -f "$pidFile" ]; then
+  oldPid=`cat "$pidFile"`
+fi
+
+case "$1" in
+  start)
+    _start_daemon
+    ;;
+  stop)
+    _stop_daemon
+    ;;
+  status)
+    _status_daemon
+    ;;
+  restart)
+    _restart_daemon
+    ;;
+  *)
+  _show_usage
+  exit 1
+esac
+
+exit 0
